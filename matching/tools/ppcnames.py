@@ -123,17 +123,25 @@ def read_csv(name):
 def windows_functions(win):
     """(game starts, every start, {start: end}, stock LIBCMT starts, starts
     functions.csv lacks). Starts are functions.csv, the addresses status.csv
-    and symbols.csv name, and the exe's direct call targets; without the
-    latter a function missing from functions.csv runs on into its neighbour."""
+    and symbols.csv name, the exe's direct call targets and the functions
+    only ever used as values (see address_taken); without the last two a
+    function missing from functions.csv runs on into its neighbour."""
     import matchcmp
     rows = read_csv("functions.csv")
-    crt = {int(r["address"], 16) for r in read_csv("crt_libcmt.csv")}
+    libcmt = read_csv("crt_libcmt.csv")
+    crt = {int(r["address"], 16) for r in libcmt}
+    handlers = {int(r["address"], 16) for r in libcmt if r["symbol"] == "___CxxFrameHandler"}
     eh = {int(r["address"], 16) for r in rows if r["kind"] == "eh"}
     listed = {int(r["address"], 16) for r in rows}
     named = {int(r["address"], 16) for r in read_csv("status.csv")}
     named |= {int(r["address"], 16) for r in read_csv("symbols.csv") if r["role"] in ("defines", "calls")}
     text_end = win.text_start + len(win.text)
     found = {a for a in named | matchcmp.call_targets(win.pe) if win.text_start <= a < text_end}
+    first = sorted(listed | found)
+    data = [(win.section(name).get_data(), win.base + win.section(name).VirtualAddress)
+            for name in (b".rdata", b".data")]
+    found |= address_taken(win.text, win.text_start, data, zip(first, first[1:] + [text_end]))
+    eh |= {a for a in found if eh_stub_target(win.text, win.text_start, a) in handlers}
     starts = sorted(listed | found)
     game = set(starts) - crt - eh
     ends = {a: b for a, b in zip(starts, starts[1:] + [text_end])}
@@ -265,7 +273,62 @@ def scan_windows(win, starts, ends, functions):
     return out
 
 
-SPECIAL = {"??0": "ctor", "??1": "dtor", "??_G": "deleting", "??_E": "deleting"}
+def plausible_start(text, text_start, a):
+    """A function can start at a: 16-byte aligned, as all but 12 of the
+    game's functions.csv starts below the C runtime are, and right after
+    padding or a ret, the bytes matchcmp.call_targets accepts before a call
+    target."""
+    j = a - text_start
+    return a % 16 == 0 and 0 < j < len(text) and (
+        text[j - 1] in (0x90, 0xCC) or text[j - 1] == 0xC3 or (j >= 3 and text[j - 3] == 0xC2))
+
+
+def eh_stub_target(text, text_start, a):
+    """Where the bytes at a jump if they have the shape of an exception
+    handler stub (mov eax, FuncInfo; jmp ___CxxFrameHandler, the address a
+    function's prologue pushes), else None."""
+    j = a - text_start
+    if 0 <= j <= len(text) - 10 and text[j] == 0xB8 and text[j + 5] == 0xE9:
+        return (a + 10 + struct.unpack_from("<i", text, j + 6)[0]) & 0xFFFFFFFF
+    return None
+
+
+def address_taken(text, text_start, data, bodies):
+    """Starts of functions only ever used as values, which no direct call
+    reaches: a vtable slot (an aligned dword of data, [(bytes, address)],
+    next to another code address, so a lone value that equals one by chance,
+    such as a pointer to a table embedded in .text, does not count), and a
+    callback a constructor or initializer registers (the immediate of an
+    instruction in bodies, [(start, end)], decoded one instruction at a
+    time). Only a plausible_start counts; the label of a switch case is
+    taken through a jump table MSVC keeps inside the function, read through
+    a displacement, not an immediate."""
+    end = text_start + len(text)
+    found = set()
+    for raw, _ in data:
+        values = struct.unpack_from(f"<{len(raw) // 4}I", raw)
+        code = [text_start <= v < end for v in values]
+        for i, value in enumerate(values):
+            if code[i] and (i and code[i - 1] or i + 1 < len(values) and code[i + 1]) \
+                    and plausible_start(text, text_start, value):
+                found.add(value)
+    for start, stop in bodies:
+        code = text[start - text_start:stop - text_start]
+        i = 0
+        while i < len(code):
+            try:
+                n, op, _, immediate = x86_instruction(code, i)
+            except IndexError:
+                break
+            if immediate and immediate[1] == 4 and op not in (0xE8, 0xE9):
+                value = struct.unpack_from("<I", code, immediate[0])[0]
+                if text_start <= value < end and plausible_start(text, text_start, value):
+                    found.add(value)
+            i += n
+    return found
+
+
+SPECIAL ={"??0": "ctor", "??1": "dtor", "??_G": "deleting", "??_E": "deleting"}
 
 
 CALLING = re.compile(r"\b__(thiscall|cdecl|stdcall|fastcall)\b")

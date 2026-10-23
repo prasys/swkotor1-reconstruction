@@ -99,34 +99,36 @@ reaches, so read these as upper bounds. Three seeds:
 | Signal | 2004 build | 2009 build |
 | --- | --- | --- |
 | vtable | 100% | 100% |
-| strings | 97–100% | 93–99% |
+| strings | 100% | 95–100% |
 | calls | 91–98% | 93–95% |
-| calls1 | 96–98% | 89–91% |
-| coverage | 49–56% | 45–51% |
+| calls1 | 97–98% | 91–92% |
+| coverage | 51–58% | 48–52% |
 
 Combined over the same hidden functions:
 
 | Combined | Recovered | Correct |
 | --- | --- | --- |
-| both builds agree | 284–311 | **97.5–100%** |
-| only one build pairs it | 73–81 | 88–96% |
-| builds disagree (left unnamed) | 5–9 | – |
-| coverage | 51–56% of the hidden | |
+| both builds agree | 295–317 | **99.0–100%** |
+| only one build pairs it | 74–104 | 90–99% |
+| builds disagree (left unnamed) | 4–6 | – |
+| coverage | 53–60% of the hidden | |
 
 Where both builds pair a function, they agree on the full signature for
-4,686 of 4,765 (98.3%).
+5,019 of 5,089 (98.6%). Before `ppcnames.py` added the address-taken
+function starts (see Findings), the same seeds gave 97.5–100% and 88–96%
+for the two combined rows and 51–56% coverage.
 
 ## Results
 
 | | Functions |
 | --- | --- |
-| Game functions in the exe (stock LIBCMT excluded) | 8,910 |
+| Game functions in the exe (stock LIBCMT excluded) | 10,346 |
 | Named by this project | 6,369 |
-| Paired with a Mac build | 5,520 |
-| Builds disagree, left unnamed | 79 |
-| **Paired and not named here** | **919** |
-| of which both builds agree | **709** |
-| Neither | 1,622 |
+| Paired with a Mac build | 6,046 |
+| Builds disagree, left unnamed | 70 |
+| **Paired and not named here** | **1,392** |
+| of which both builds agree | **998** |
+| Neither | 2,585 |
 
 A name pair also records how its parameters agree with the repo's: 2,999
 exact, 286 compatible, 223 unknown (a `status.csv` name without
@@ -137,7 +139,7 @@ dropped because a known pair contradicted their alignment: that build adds
 a virtual (`AsNavigable`) to the `CSWGuiControl` family, shifting every
 later slot.
 
-None of the 919 has been attempted in `matching/`. They cover the whole
+None of the 1,392 has been attempted in `matching/`. They cover the whole
 game: server-side logic, UI, client side, client/server messages,
 renderer (`GLRender`, `CAurInternalGL`, `Scene`), NWScript commands and
 the minigames (`CSWMiniGame`, `CSWMiniPlayer`, Pazaak), four of which have
@@ -145,21 +147,21 @@ no playable `src/` definition yet.
 
 ### Source files and link order
 
-The 2009 debug map gives the original object file for the 5,237 Windows
+The 2009 debug map gives the original object file for the 5,742 Windows
 functions paired with that build. In address order these fall into long
 runs, one object at a time: the exe is laid out file by file, as MSVC links
 `.obj` files. The single-function interruptions are inline helpers that
 GCC emitted in a different file than MSVC did.
 
-- 268 runs of at least three functions cover 5,064 of the 5,237.
-- Merged, they give an inferred link order of 226 runs over 216 object
+- 284 runs of at least three functions cover 5,564 of the 5,742.
+- Merged, they give an inferred link order of 239 runs over 225 object
   files, beginning `appmanager`, `main`, `exomovieplayerinternal`,
   `exoresman`, `guiingame`, `swgui`, `swguiabilitieschargen`, `swgui`,
   `exoresfile`, `resgff`.
   STRUCTURE.md lists the original link order as open work for phase 4.
-- 2,569 functions sit inside a run; 851 of them are still unnamed, and the
-  run gives their likely source file (56 in `nwscreatureai`, 53 in
-  `guiingame`, 39 in `aurglcore`, 35 in `nwccreature`). `mac_names.csv`
+- 3,218 functions sit inside a run; 1,541 of them are still unnamed, and
+  the run gives their likely source file (298 in `nwvmachinecommands`, 63
+  in `swguipazaak`, 61 in `swguioptions`, 55 in `guiingame`). `mac_names.csv`
   marks these `neighbours`, apart from the `debug map` ones.
 
 ## Findings for this repository
@@ -173,6 +175,36 @@ GCC emitted in a different file than MSVC did.
   ```bash
   python -c "import csv; rows=lambda n: list(csv.DictReader(open('matching/'+n))); f={int(r['address'],16) for r in rows('functions.csv')}; n={int(r['address'],16) for r in rows('status.csv')+[r for r in rows('symbols.csv') if r['role']!='data']}; print(len(n-f), ['0x%08X' % a for a in sorted(n-f)])"
   ```
+- **`functions.csv` also lacks the functions only used as values**, which
+  no direct call reaches: vtable slots, GUI callbacks a constructor
+  registers (`push offset` before `AddEvent` at `0x0041AB20`), and the
+  NWScript command table. `ppcnames.py` now adds each such address that is
+  16-byte aligned and follows padding or a `ret` (`address_taken`): 1,436
+  more game functions. The playable `src/` defines 1,117 of them, among
+  them all 372 in `nwvmachinecommands`. 128 others at `0x0073xxxx` are 65
+  entries of one function table in `.data` (`0x0078D008`–`0x0078D17C`,
+  likely the static initializers) and 63 functions whose address only code
+  takes (likely the destructors those register). Without them, `calls`, `calls1` and `strings` read a
+  swallowed function's calls and strings as its neighbour's and named the
+  wrong start. Four such names, each contradicted by the exe:
+  - `0x0067D060` was `CSWGuiPazaakCard::HandleLMouseUp()`, but it is
+    `CSWGuiPazaakCard` vtable slot 4 and returns with `ret 8`. Slot 7,
+    `HandleLMouseUp` in `CSWGuiButton`'s vtable (`0x0073E658`), is
+    `0x0067D0D0`, which ends in `jmp CSWGuiControl::HandleLMouseUp`.
+  - `0x0067CA80` was `HandleInputEvent(int, int)`, but it is slot 14
+    (`Draw`) and returns with `ret 4`. Slot 15 is `0x0067CAC0`, which jumps
+    to `CSWGuiButton::HandleInputEvent` (`ret 8`).
+  - `0x00625A00` was `CSWGuiControllerLossBox::OnAccept(CSWGuiControl*)`,
+    but it returns with `ret` and fills `CSWGuiPanel` slot 19
+    (`OnPanelRemoved`).
+  - `0x00693BA0` was `CSWGuiInGameMap::OnMapNoteClicked(CSWGuiControl*)`,
+    but it fills slot 19 and ends in `jmp CSWGuiPanel::OnPanelRemoved`.
+
+  The rerun names `0x0067D0D0`, `0x0067CAC0` and `0x00625A40` (`ret 4`)
+  instead and drops the other. Of the 83 names it dropped or changed, the
+  `ret` of the function contradicts the old name for 45 and none
+  contradicts a new one. The candidates came from comparing the iOS build's
+  vtables with these slots.
 - **MSVC lays out overloaded virtual functions in reverse.** In
   `CSWCAnimBase` and `CSWCAnimBaseTW`, `ReplaceTexture(CResRef const&, ...)`
   and `ReplaceTexture(unsigned char, ...)` occupy swapped slots in the two
