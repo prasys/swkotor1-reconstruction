@@ -217,6 +217,52 @@ class X86Scanner(unittest.TestCase):
         self.assertEqual(self.scan(bytes.fromhex("90 e8 00 00"))[0], [])
 
 
+PAD = b"\x90" * 15
+
+
+class AddressTaken(unittest.TestCase):
+    # 0x1000 ret; 0x1010 ret; 0x1020 code after padding; 0x1030 code after
+    # code (not a start); 0x1040 after a ret; 0x1050 the body that is scanned
+    TEXT = (b"\xc3" + PAD + b"\xc3" + PAD + bytes.fromhex("33 c0") * 8
+            + bytes.fromhex("33 c0") * 7 + bytes.fromhex("90 c3") + b"\xc3" + PAD)
+
+    def taken(self, data=(), body=b""):
+        text = self.TEXT + body
+        return pn.address_taken(text, 0x1000, [(struct.pack(f"<{len(data)}I", *data), 0x8000)],
+                                [(0x1050, 0x1050 + len(body))])
+
+    def test_plausible_start(self):
+        text = self.TEXT
+        self.assertEqual([a for a in range(0x1000, 0x1050) if pn.plausible_start(text, 0x1000, a)],
+                         [0x1010, 0x1020, 0x1040])
+
+    def test_vtable_slots_are_starts(self):
+        self.assertEqual(self.taken([7, 0x1010, 0x1020, 0x1040, 7]), {0x1010, 0x1020, 0x1040})
+
+    def test_a_lone_code_address_in_data_is_not(self):
+        # a value that equals a code address by chance, or points at a table in .text
+        self.assertEqual(self.taken([7, 0x1010, 7, 0x1020]), set())
+
+    def test_slot_that_is_not_a_plausible_start_is_skipped(self):
+        self.assertEqual(self.taken([0x1030, 0x1011, 0x1020]), {0x1020})
+
+    def test_immediates_count_and_displacements_and_calls_do_not(self):
+        body = (bytes.fromhex("68 10 10 00 00")         # push 0x1010: a registered callback
+                + bytes.fromhex("b8 20 10 00 00")       # mov eax, 0x1020
+                + bytes.fromhex("ff 24 85 40 10 00 00")  # jmp [eax*4+0x1040]: a switch table
+                + bytes.fromhex("68 30 10 00 00")       # push 0x1030: not a plausible start
+                + bytes.fromhex("e8 40 10 00 00")       # call: a relative 0x1040, not an address
+                + b"\xc3")
+        self.assertEqual(self.taken(body=body), {0x1010, 0x1020})
+
+    def test_exception_handler_stub(self):
+        text = b"\xc3" + PAD + b"\xb8\x00\x80\x00\x00\xe9" + struct.pack("<i", 0x2000 - 0x101A) + b"\x90" * 6
+        self.assertEqual(pn.eh_stub_target(text, 0x1000, 0x1010), 0x2000)
+        self.assertIsNone(pn.eh_stub_target(text, 0x1000, 0x1000))
+        self.assertIsNone(pn.eh_stub_target(text, 0x1000, 0x1016))  # inside the stub
+        self.assertIsNone(pn.eh_stub_target(text[:20], 0x1000, 0x1010))  # runs past the end
+
+
 def ppc(*words):
     return b"".join(struct.pack(">I", w) for w in words)
 
