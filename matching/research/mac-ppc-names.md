@@ -109,8 +109,8 @@ Combined over the same hidden functions:
 | Combined | Recovered | Correct |
 | --- | --- | --- |
 | both builds agree | 295–317 | **99.0–100%** |
-| only one build pairs it | 74–104 | 90–99% |
-| builds disagree (left unnamed) | 4–6 | – |
+| only one build pairs it | 75–104 | 91–99% |
+| builds disagree (left unnamed) | 5–6 | – |
 | coverage | 53–60% of the hidden | |
 
 Where both builds pair a function, they agree on the full signature for
@@ -128,7 +128,7 @@ for the two combined rows and 51–56% coverage.
 | Builds disagree, left unnamed | 70 |
 | **Paired and not named here** | **1,392** |
 | of which both builds agree | **998** |
-| Neither | 2,585 |
+| Neither | 2,580 |
 
 A name pair also records how its parameters agree with the repo's: 2,999
 exact, 286 compatible, 223 unknown (a `status.csv` name without
@@ -159,7 +159,7 @@ GCC emitted in a different file than MSVC did.
   `exoresman`, `guiingame`, `swgui`, `swguiabilitieschargen`, `swgui`,
   `exoresfile`, `resgff`.
   STRUCTURE.md lists the original link order as open work for phase 4.
-- 3,218 functions sit inside a run; 1,541 of them are still unnamed, and
+- 3,213 functions sit inside a run; 1,536 of them are still unnamed, and
   the run gives their likely source file (298 in `nwvmachinecommands`, 63
   in `swguipazaak`, 61 in `swguioptions`, 55 in `guiingame`). `mac_names.csv`
   marks these `neighbours`, apart from the `debug map` ones.
@@ -179,8 +179,12 @@ GCC emitted in a different file than MSVC did.
   no direct call reaches: vtable slots, GUI callbacks a constructor
   registers (`push offset` before `AddEvent` at `0x0041AB20`), and the
   NWScript command table. `ppcnames.py` now adds each such address that is
-  16-byte aligned and follows padding or a `ret` (`address_taken`): 1,436
-  more game functions. The playable `src/` defines 1,117 of them, among
+  16-byte aligned and follows padding or a `ret` (`address_taken`): 1,431
+  more game functions. The case labels of a jump table MSVC keeps inside
+  the function (`jmp [4*reg+table]`) are left out: decoding the table as
+  instructions reads them as immediates, which split
+  `CSWCAnimBase::ServerToClientAnimation` (`0x0069F650`) at `0x0069F950`.
+  The playable `src/` defines 1,117 of the 1,431, among
   them all 372 in `nwvmachinecommands`. 128 others at `0x0073xxxx` are 65
   entries of one function table in `.data` (`0x0078D008`–`0x0078D17C`,
   likely the static initializers) and 63 functions whose address only code

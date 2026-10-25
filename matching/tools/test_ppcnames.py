@@ -255,6 +255,17 @@ class AddressTaken(unittest.TestCase):
                 + b"\xc3")
         self.assertEqual(self.taken(body=body), {0x1010, 0x1020})
 
+    def test_case_labels_of_a_jump_table_in_the_body_are_not(self):
+        # the table at 0x1071 follows a 0x68 byte, so the scan reads its first
+        # entry, the case at 0x1060, as push 0x1060 (0x0069F950 in the exe)
+        body = (bytes.fromhex("ff 24 85 71 10 00 00")  # 0x1050 jmp [eax*4+0x1071]
+                + b"\xc3" + b"\x90" * 8                  # 0x1057 ret, padding
+                + bytes.fromhex("33 c0 c3") + b"\x90" * 13  # 0x1060 the case
+                + b"\x68" + struct.pack("<I", 0x1060)    # 0x1070, the table at 0x1071
+                + b"\xc3")
+        self.assertEqual(self.taken(body=body), set())
+        self.assertEqual(self.taken(body=b"\x90" * 7 + body[7:]), {0x1060})
+
     def test_exception_handler_stub(self):
         text = b"\xc3" + PAD + b"\xb8\x00\x80\x00\x00\xe9" + struct.pack("<i", 0x2000 - 0x101A) + b"\x90" * 6
         self.assertEqual(pn.eh_stub_target(text, 0x1000, 0x1010), 0x2000)

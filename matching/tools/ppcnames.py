@@ -314,6 +314,7 @@ def address_taken(text, text_start, data, bodies):
                 found.add(value)
     for start, stop in bodies:
         code = text[start - text_start:stop - text_start]
+        values, tables = set(), []
         i = 0
         while i < len(code):
             try:
@@ -323,8 +324,19 @@ def address_taken(text, text_start, data, bodies):
             if immediate and immediate[1] == 4 and op not in (0xE8, 0xE9):
                 value = struct.unpack_from("<I", code, immediate[0])[0]
                 if text_start <= value < end and plausible_start(text, text_start, value):
-                    found.add(value)
+                    values.add(value)
+            # jmp [4*reg+table]: the table's case labels are not starts, and
+            # decoding the table's dwords as instructions yields them as
+            # immediates (0x0069F950 in CSWCAnimBase::ServerToClientAnimation)
+            if op == 0xFF and code[i + 1] == 0x24 and code[i + 2] & 0xC7 == 0x85 and i + 7 <= len(code):
+                tables.append(struct.unpack_from("<I", code, i + 3)[0])
             i += n
+        for table in tables:
+            j = table - start
+            while 0 <= j <= len(code) - 4 and start <= struct.unpack_from("<I", code, j)[0] < stop:
+                values.discard(struct.unpack_from("<I", code, j)[0])
+                j += 4
+        found |= values
     return found
 
 

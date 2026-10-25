@@ -8173,8 +8173,6 @@ address,mac_name,method,builds,conflict,signature,source,source_how
 0x0069AA50,,,,,,nwcanimbasewield.o,neighbours
 0x0069AA60,,,,,,nwcanimbasewield.o,neighbours
 0x0069AA90,,,conflict,"CSWCAnimBaseWield::GetItemAurObject(unsigned long, unsigned char) | CSWCAnimBaseWield::GetModel(unsigned char)",,nwcanimbasewield.o,debug map
-0x0069AAC0,,,,,,nwcanimbasewield.o,neighbours
-0x0069AB10,,,,,,nwcanimbasewield.o,neighbours
 0x0069AB80,"CSWCAnimBaseWield::Wield(unsigned long, CExoString const&, unsigned char, float)",strings,2/2,,,nwcanimbasewield.o,debug map
 0x0069AF10,CSWCAnimBaseWield::ReAttachWieldedObjects(),calls,2/2,,,nwcanimbasewield.o,debug map
 0x0069AFD0,,,,,,nwcanimbasewield.o,neighbours
@@ -8299,9 +8297,6 @@ address,mac_name,method,builds,conflict,signature,source,source_how
 0x0069F1E0,CSWCAnimBase::GetCenterPoint(Vector&),vtable,1/2,,,nwcanimbase.o,debug map
 0x0069F630,CSWCAnimBase::GetBoundingRect(CSWGuiExtent&),vtable,1/2,,,nwcanimbase.o,debug map
 0x0069F650,CSWCAnimBase::ServerToClientAnimation(unsigned short),vtable,1/2,,,nwcanimbase.o,debug map
-0x0069F950,,,,,,nwcanimbase.o,neighbours
-0x0069FAA0,,,,,,nwcanimbase.o,neighbours
-0x0069FE60,,,,,,nwcanimbase.o,neighbours
 0x006A03A0,CSWCAnimBase::~CSWCAnimBase(),vtable,2/2,,,nwcanimbase.o,debug map
 0x006A03C0,"CSWCAnimBase::SetOverlayAnimation(unsigned short, int)",vtable,2/2,,,nwcanimbase.o,debug map
 0x006A03E0,"CSWCAnimBase::Hilite(Vector const&, unsigned char, int)",calls1,1/2,,,nwcanimbase.o,debug map
